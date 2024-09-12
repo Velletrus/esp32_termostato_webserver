@@ -116,7 +116,6 @@ void loop() {
 }
 void getdata(){
       /// copongo la stringa
-      server.
       server.send(200, "application/json", generaJson());
       
   ;}
