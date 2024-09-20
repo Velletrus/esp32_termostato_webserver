@@ -4,7 +4,7 @@ bool riscaldamento ( float sp, float pv, float hyst, bool _en){
     int limitSec = 3600; /// 1 orA
     ///Serial.println(limit);
     if (_en) {
-          if (pv < (sp-hyst)){
+          if (pv < (sp+hyst)){ // da scaricare 
               state = true;
               limit++;
               if (limit > limitSec)
@@ -20,7 +20,7 @@ bool riscaldamento ( float sp, float pv, float hyst, bool _en){
               }
               flag2 = false;
           }
-          else if (pv > (sp + hyst)){
+          else if (pv > (sp - hyst)){ /// da modificare
             if (!flag2){
               Serial.print(pv); Serial.print(" "); Serial.print(sp); Serial.print(" "); Serial.print(sp + hyst);Serial.println(" sPENTO");
               flag2 = true;
