@@ -13,7 +13,39 @@
 #define pinDATA 2 // SDA, or almost any other I/O pin
 #define caldaia 16
 #define EEPROM_SIZE 20
-
+uint8_t gradi[8] =
+{
+    0b01000,
+    0b10100,
+    0b01000,
+    0b00000,
+    0b00000,
+    0b00000,
+    0b00000,
+    0b00000,
+};
+uint8_t cursoreON[8] =
+{
+    0b11111,
+    0b11111,
+    0b10001,
+    0b10001,
+    0b10001,
+    0b10001,
+    0b11111,
+    0b11111,
+};
+uint8_t cursoreOFF[8] =
+{
+    0b00000,
+    0b00000,
+    0b01110,
+    0b01110,
+    0b01110,
+    0b01110,
+    0b00000,
+    0b00000,
+};
 DHT22 dht22(pinDATA); 
 LCD_I2C lcd(0x27, 16, 2);
 unsigned long prevMillis, actMillis;
@@ -36,19 +68,9 @@ IPAddress gw(192,168,1,254);
 
 const char* ssid =  "FranzWifi";
 const char* pw =    "Velletri82.";
-
+int lcdstate = 0;
 WebServer server(80);
-uint8_t gradi[8] =
-{
-    0b01000,
-    0b10100,
-    0b01000,
-    0b00000,
-    0b00000,
-    0b00000,
-    0b00000,
-    0b00000,
-};
+
 void setup() {
   //// setup wifi
   
@@ -56,6 +78,8 @@ void setup() {
   lcd.begin(); 
   lcd.backlight();
   lcd.createChar(0, gradi);
+  lcd.createChar(1, cursoreON);
+  lcd.createChar(2, cursoreOFF);
   Serial.begin(9600); //1bit=10µs
   WiFi.config(ip, dns, gw, sub);
   WiFi.mode(WIFI_STA);
@@ -193,6 +217,24 @@ void lcdWrite(){
         {
           lcd.print("SPENTO"); 
         } 
+        lcd.print("  ");
+        if (en)
+        {
+          switch (lcdstate){
+            case 0 :
+               lcd.write(1);
+                lcdstate++;
+            break;
+            case 1 :
+               lcd.write(2);
+               lcdstate=0;
+            break;
+          }
+        }else
+        {
+          lcd.print("X");
+        }
+        
 
 }
 void connectToWiFi() {

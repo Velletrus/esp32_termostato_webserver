@@ -47,7 +47,7 @@ bool riscaldamento ( float sp, float pv, float hyst, bool _en){
 
     }
     /// conteggio secondo per forzare spegimento se non è arrivato a temperatura
-   
+    
     digitalWrite(caldaia, state);
     return state;
 
