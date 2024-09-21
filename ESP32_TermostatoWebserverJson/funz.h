@@ -1,34 +1,39 @@
+int risc_state = 0;
+bool state = false;
 
 bool riscaldamento ( float sp, float pv, float hyst, bool _en){
-    bool state = false;
+    
     int limitSec = 3600; /// 1 orA
     ///Serial.println(limit);
     if (_en) {
-          if (pv < (sp+hyst)){ // da scaricare 
-              state = true;
-              limit++;
-              if (limit > limitSec)
-              {
-                state = false; // se la temepratura non è ancora sarita dopo un oera spengo a prescidere
-              } else
-              {
-                state = true;
-              }
-              if (! flag1){
-                Serial.print(pv); Serial.print(" "); Serial.print(sp); Serial.print(" "); Serial.print(sp - hyst); Serial.println(" ACCESO");
-                flag1 = true;
-              }
-              flag2 = false;
-          }
-          else if (pv > (sp - hyst)){ /// da modificare
-            if (!flag2){
-              Serial.print(pv); Serial.print(" "); Serial.print(sp); Serial.print(" "); Serial.print(sp + hyst);Serial.println(" sPENTO");
-              flag2 = true;
-            }
-            flag1 = false;
-            state = false;
-            limit = 0; /// azzero il conteggio
-            
+          switch (risc_state){
+            case 0 :
+             if (sp > (pv + hyst))
+                {  
+                  state = true;
+                  risc_state = 10; // riscaldamento
+                  limit++;
+                  Serial.print(pv); Serial.print(" "); Serial.print(sp); Serial.print(" "); Serial.print(sp - hyst); Serial.println(" ACCESO");
+                }
+            break;
+            case 10:
+               if (pv > (sp + hyst))
+                  {
+                    state = false;
+                    risc_state = 20;// entro in isteresi
+                    Serial.println("hyst in");
+                    Serial.print(risc_state); Serial.print(" ");Serial.print(pv); Serial.print(" "); Serial.print(sp); Serial.print(" "); Serial.print(sp + hyst);Serial.println(" sPENTO");
+                  } 
+            break;
+            case 20: 
+                limit = 0;
+                if (sp < (pv - hyst)) // esco isteresi
+                {
+                  risc_state = 0;
+                  Serial.println("hyst out");
+                }
+            break;
+
           }
 
     }
@@ -36,6 +41,10 @@ bool riscaldamento ( float sp, float pv, float hyst, bool _en){
     {
       limit = 0;
       state = false;
+      flag1 = false;
+      flag2 = false;
+      risc_state = 0;
+
     }
     /// conteggio secondo per forzare spegimento se non è arrivato a temperatura
    

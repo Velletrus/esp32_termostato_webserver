@@ -66,7 +66,7 @@ void setup() {
   if (WiFi.status() != WL_CONNECTED){
     Serial.print(".");
     lcd.print(".");
-    delay(500);
+    delay(200);
   }
   lcd.clear();
   Serial.println("");
@@ -75,7 +75,7 @@ void setup() {
   lcd.print(WiFi.localIP());
   pinMode(23, OUTPUT);
   pinMode(caldaia, OUTPUT); /// rele caldaia
-  delay(500);
+  delay(1000);
   lcd.clear();
   server.on("/", HTTP_GET,  getdata);
   server.on("/accendi",accendi);
@@ -84,7 +84,9 @@ void setup() {
   server.begin();
   setpoint = EEPROM.readFloat(1);
   hyst = EEPROM.readFloat(5);
+  lcd.clear();
   Serial.print(setpoint); Serial.print(" "); Serial.println(hyst);
+  lcd.print(setpoint); lcd.print(" "); lcd.println(hyst);
   delay(1000);
 }
 
