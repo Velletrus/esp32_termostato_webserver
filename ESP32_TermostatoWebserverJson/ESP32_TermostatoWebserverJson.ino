@@ -5,13 +5,13 @@
 #include <ArduinoJson.hpp>
 #include <LCD_I2C.h>
 #include <WiFi.h>
-
-#include <WebServer.h>
+#include <ArduinoOTA.h>
 #include <DHT22.h>
 
 //define pin data
 #define pinDATA 2 // SDA, or almost any other I/O pin
 #define caldaia 16
+#define ciclino 17
 #define EEPROM_SIZE 20
 uint8_t gradi[8] =
 {
@@ -60,7 +60,7 @@ bool enRisc = false;
 int limit = 0;
 IPAddress dns(8,8,8,8);
 float t,h;
-bool en = true; //// da mettere a fale
+bool en = false; //// da mettere a fale
 #include "funz.h"
 IPAddress ip(192,168,1,82);
 IPAddress sub(255,255,255,0);
@@ -80,7 +80,7 @@ void setup() {
   lcd.createChar(0, gradi);
   lcd.createChar(1, cursoreON);
   lcd.createChar(2, cursoreOFF);
-  Serial.begin(9600); //1bit=10µs
+  Serial.begin(115200); //1bit=10µs
   WiFi.config(ip, dns, gw, sub);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, pw);
@@ -99,23 +99,61 @@ void setup() {
   lcd.print(WiFi.localIP());
   pinMode(23, OUTPUT);
   pinMode(caldaia, OUTPUT); /// rele caldaia
+  pinMode(17, OUTPUT);
   delay(1000);
   lcd.clear();
   server.on("/", HTTP_GET,  getdata);
   server.on("/accendi",accendi);
   server.on("/spegni", spegni);
   server.on("/setpoint", HTTP_GET, impsetpoint);
+ // server.on("/allarme", HTTP_GET, cicalino );
   server.begin();
   setpoint = EEPROM.readFloat(1);
   hyst = EEPROM.readFloat(5);
   lcd.clear();
   Serial.print(setpoint); Serial.print(" "); Serial.println(hyst);
   lcd.print(setpoint); lcd.print(" "); lcd.println(hyst);
+  ArduinoOTA.begin();
+
+  ArduinoOTA.onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH) {
+      type = "sketch";
+    } else {  // U_SPIFFS
+      type = "filesystem";
+    }
+    // Aggiorna: cancella dati vecchi
+    Serial.println("Start updating " + type);
+  });
+
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) {
+      Serial.println("Auth Failed");
+    } else if (error == OTA_BEGIN_ERROR) {
+      Serial.println("Begin Failed");
+    } else if (error == OTA_CONNECT_ERROR) {
+      Serial.println("Connect Failed");
+    } else if (error == OTA_RECEIVE_ERROR) {
+      Serial.println("Receive Failed");
+    } else if (error == OTA_END_ERROR) {
+      Serial.println("End Failed");
+    }
+  });
   delay(1000);
 }
 
 void loop() {
   //Serial.println(dht22.debug()); //optionnal
+  ArduinoOTA.handle();
   actMillis = millis();
   server.handleClient();
   delay(2);
@@ -208,14 +246,14 @@ void lcdWrite(){
         lcd.setCursor(0, 0); //Collecting period should be : >1.7 second
         lcd.print("t= "); lcd.print(t,1); lcd.write(0); lcd.print("h= "); lcd.print(h, 1); lcd.print("%");
         lcd.setCursor(0, 1);
-        lcd.print("Risc = "); 
+        lcd.print("s="); lcd.print(setpoint,1);
         if (outRisc)
         {
-          lcd.print("ACCESO"); 
+          lcd.print(" ACCESO"); 
         }
         else
         {
-          lcd.print("SPENTO"); 
+          lcd.print(" SPENTO"); 
         } 
         lcd.print("  ");
         if (en)
