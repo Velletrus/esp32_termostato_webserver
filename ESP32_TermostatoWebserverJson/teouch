@@ -1,0 +1,343 @@
+#include <EEPROM.h>
+#include <ArduinoJson.h>
+#include <ArduinoJson.hpp>
+#include <LCD_I2C.h>
+#include <WiFi.h>
+#include <ArduinoOTA.h>
+#include <DHT22.h>
+#include <WebServer.h>
+//define pin data
+#define pinDATA 2 // SDA, or almost any other I/O pin
+#define caldaia 16
+#define ciclino 17
+#define EEPROM_SIZE 20
+uint8_t gradi[8] =
+{
+    0b01000,
+    0b10100,
+    0b01000,
+    0b00000,
+    0b00000,
+    0b00000,
+    0b00000,
+    0b00000,
+};
+uint8_t cursoreON[8] =
+{
+    0b11111,
+    0b11111,
+    0b10001,
+    0b10001,
+    0b10001,
+    0b10001,
+    0b11111,
+    0b11111,
+};
+uint8_t cursoreOFF[8] =
+{
+    0b00000,
+    0b00000,
+    0b01110,
+    0b01110,
+    0b01110,
+    0b01110,
+    0b00000,
+    0b00000,
+};
+DHT22 dht22(pinDATA); 
+LCD_I2C lcd(0x27, 16, 2);
+unsigned long prevMillis, actMillis;
+bool outRisc;
+bool manual;
+float setpoint = 25.0;
+float hyst = 1.0;
+float sym = 0.0;
+bool updn = false;
+bool flag1 , flag2;
+bool enRisc = false;
+int limit = 0;
+IPAddress dns(8,8,8,8);
+float t,h;
+bool en = false; //// da mettere a fale
+#include "funz.h"
+IPAddress ip(192,168,1,82);
+IPAddress sub(255,255,255,0);
+IPAddress gw(192,168,1,254);
+bool touchPrev = false;
+const char* ssid =  "FranzWifi";
+const char* pw =    "Velletri82.";
+bool ledState = false;
+WebServer server(80);
+int lcdstate = 0;
+bool touched = false;
+int touchlevel = 0;
+void setup() {
+  //// setup wifi
+  
+  EEPROM.begin(EEPROM_SIZE);
+  lcd.begin(); 
+  lcd.backlight();
+  lcd.createChar(0, gradi);
+  lcd.createChar(1, cursoreON);
+  lcd.createChar(2, cursoreOFF);
+  Serial.begin(115200); //1bit=10µs
+  WiFi.config(ip, dns, gw, sub);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, pw);
+  Serial.print("Con WIFI");
+  lcd.setCursor(0, 0);
+  lcd.print("Wifi");
+  if (WiFi.status() != WL_CONNECTED){
+    Serial.print(".");
+    lcd.print(".");
+    delay(200);
+  }
+  lcd.clear();
+  Serial.println("");
+  Serial.print("IP = "); Serial.println(WiFi.localIP());
+  lcd.setCursor(0,0); 
+  lcd.print(WiFi.localIP());
+  pinMode(23, OUTPUT);
+  pinMode(caldaia, OUTPUT); /// rele caldaia
+  pinMode(17, OUTPUT);
+  delay(1000);
+  lcd.clear();
+  server.on("/", HTTP_GET,  getdata);
+  server.on("/accendi",accendi);
+  server.on("/spegni", spegni);
+  server.on("/set", HTTP_GET, impsetpoint);
+ // server.on("/allarme", HTTP_GET, cicalino );
+  server.begin();
+  setpoint = EEPROM.readFloat(1);
+  hyst = EEPROM.readFloat(5);
+  touchlevel = EEPROM.readInt(9);
+  lcd.clear();
+  Serial.print(setpoint); Serial.print(" "); Serial.println(hyst);
+  lcd.print(setpoint); lcd.print(" "); lcd.println(hyst);
+  ArduinoOTA.begin();
+
+  ArduinoOTA.onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH) {
+      type = "sketch";
+    } else {  // U_SPIFFS
+      type = "filesystem";
+    }
+    // Aggiorna: cancella dati vecchi
+    Serial.println("Start updating " + type);
+  });
+
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) {
+      Serial.println("Auth Failed");
+    } else if (error == OTA_BEGIN_ERROR) {
+      Serial.println("Begin Failed");
+    } else if (error == OTA_CONNECT_ERROR) {
+      Serial.println("Connect Failed");
+    } else if (error == OTA_RECEIVE_ERROR) {
+      Serial.println("Receive Failed");
+    } else if (error == OTA_END_ERROR) {
+      Serial.println("End Failed");
+    }
+  });
+  delay(1000);
+}
+
+void loop() {
+  //Serial.println(dht22.debug()); //optionnal
+  ArduinoOTA.handle();
+  actMillis = millis();
+  server.handleClient();
+ 
+  delay(2);
+  if (actMillis -prevMillis >= 1500){
+        t = dht22.getTemperature();
+        h = dht22.getHumidity();
+        t = t + sym;
+       
+        if (dht22.getLastError() != dht22.OK) {
+          Serial.print("last error :");
+          Serial.println(dht22.getLastError());
+          en = false;
+        }
+        outRisc = riscaldamento(setpoint, t, hyst, en);
+        
+      //  Serial.println(WiFi.status());
+        prevMillis = actMillis;
+         if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("Connessione Wi-Fi persa. Riconnessione...");
+       connectToWiFi();
+      }
+//// simulazione
+    touchPin();
+    lcdWrite();
+  }
+}
+void touchPin(){
+  int touchValue = touchRead(4);
+  bool touchNow = touchValue < touchlevel;
+  if (touchNow){
+    touched = true;
+  }
+  else{
+    touched = false;
+  }
+  Serial.println(touchValue);
+  // Rileva il fronte di discesa (da non toccato a toccato)
+  if (touchNow && !touchPrev) {
+    ledState = !ledState;
+    digitalWrite(23, ledState);
+    Serial.println("toch " + ledState);
+    if (en)
+    {
+      en = false;
+    }
+    else{
+      en = true;
+    }
+  }
+
+  touchPrev = touchNow;
+  delay(10);
+
+}
+void getdata(){
+      /// copongo la stringa
+      server.send(200, "application/json", generaJson());
+      
+  ;}
+
+void accendi()
+  {
+     server.send(200, "application/json", generaJson());
+      en = true;
+   }
+
+void spegni(){ 
+      
+      server.send(200, "application/json", generaJson());
+      en = false;}
+
+void impsetpoint(){ 
+      bool savemem = false;
+      if(server.hasArg("setpoint")){
+        String _arg = server.arg("setpoint");
+        Serial.println(_arg);
+        setpoint = _arg.toFloat();
+        EEPROM.writeFloat(1, setpoint);
+        //EEPROM.commit();
+        savemem = true;
+// Read a Float Variable From EEPROM @ Specific Address
+
+      };
+      if(server.hasArg("hyst")){
+        String _arg = server.arg("hyst");
+        Serial.println(_arg);
+        hyst = _arg.toFloat();
+        EEPROM.writeFloat(5, hyst);
+      //  EEPROM.commit();
+        savemem = true;
+      };
+      if(server.hasArg("touch")){
+        String _arg = server.arg("touch");
+        Serial.println(_arg);
+        touchlevel = _arg.toInt();
+        EEPROM.writeInt(9, touchlevel);
+      
+        savemem = true;
+      };
+      if (savemem)
+      {
+         EEPROM.commit();
+         Serial.println("salvato in EEprom");
+      }
+      server.send(200, "application/json", generaJson());
+      
+      }
+String generaJson(){
+  JsonDocument doc;
+  String _jsonObj;
+      doc["temp"]= t;
+      doc["hum"] = h;
+      doc["status"] = en;
+      doc["caldaia"] = outRisc;
+      doc["setpoint"] = setpoint;
+      doc["secOn"] = limit;
+      doc["hyst"] = hyst;
+      doc["touch"] = touchlevel;
+      serializeJson(doc, _jsonObj);
+      Serial.println(_jsonObj);
+      
+      return _jsonObj;
+}
+
+void lcdWrite(){
+       
+        digitalWrite(23, !digitalRead(23));
+       // delay(1000);
+        lcd.setCursor(0, 0); //Collecting period should be : >1.7 second
+        lcd.print("t= "); lcd.print(t,1); lcd.write(0); lcd.print("h= "); lcd.print(h, 1); lcd.print("%");
+        lcd.setCursor(0, 1);
+        lcd.print("s="); lcd.print(setpoint,1);
+        if (touched){
+          lcd.print(" TOUCH ");
+        }else{
+          if (outRisc)
+          {
+            lcd.print(" ACCESO"); 
+          }
+          else
+          {
+            lcd.print(" SPENTO"); 
+          } 
+        }
+        lcd.print("  ");
+        if (en)
+        {
+          switch (lcdstate){
+            case 0 :
+               lcd.write(1);
+                lcdstate++;
+            break;
+            case 1 :
+               lcd.write(2);
+               lcdstate=0;
+            break;
+          }
+        }else
+        {
+          lcd.print("X");
+        }
+        
+
+}
+void connectToWiFi() {
+  Serial.print("Connessione alla rete Wi-Fi...");
+  
+  // Avvio della connessione
+  WiFi.begin(ssid, pw);
+  
+  // Attendi finché non viene stabilita la connessione
+  unsigned long startTime = millis();
+  unsigned long timeout = 10000;  // Timeout di 10 secondi
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    if (millis() - startTime >= timeout) {
+      Serial.println("Timeout di connessione!");
+      return;  // Esci se il timeout è stato superato
+    }
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("Connesso!");
+}
