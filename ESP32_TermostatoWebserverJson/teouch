@@ -106,6 +106,7 @@ void setup() {
   server.on("/accendi",accendi);
   server.on("/spegni", spegni);
   server.on("/set", HTTP_GET, impsetpoint);
+  server.on("/web", HTTP_GET, paginaWeb); // Pagina HTML
  // server.on("/allarme", HTTP_GET, cicalino );
   server.begin();
   setpoint = EEPROM.readFloat(1);
@@ -340,4 +341,239 @@ void connectToWiFi() {
   }
 
   Serial.println("Connesso!");
+}
+
+void paginaWeb()
+{
+  String html = R"rawliteral(
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Termostato ESP32</title>
+
+<style>
+
+body{
+    font-family:Arial,Helvetica,sans-serif;
+    background:#e8ecef;
+    margin:0;
+    padding:20px;
+}
+
+.card{
+    max-width:500px;
+    margin:auto;
+    background:white;
+    padding:20px;
+    border-radius:12px;
+    box-shadow:0px 0px 10px rgba(0,0,0,0.2);
+}
+
+h2{
+    text-align:center;
+}
+
+.value{
+    font-weight:bold;
+    color:#0066cc;
+}
+
+input{
+    width:120px;
+    padding:8px;
+    font-size:16px;
+    text-align:center;
+}
+
+button{
+    padding:10px 15px;
+    margin:5px;
+    border:none;
+    border-radius:6px;
+    cursor:pointer;
+    font-size:16px;
+}
+
+.btnOn{
+    background:#28a745;
+    color:white;
+}
+
+.btnOff{
+    background:#dc3545;
+    color:white;
+}
+
+.btnSet{
+    background:#007bff;
+    color:white;
+}
+
+.status{
+    padding:5px 10px;
+    border-radius:5px;
+    color:white;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="card">
+
+<h2>Termostato ESP32</h2>
+
+<p>Temperatura: <span class="value" id="temp">--</span> °C</p>
+
+<p>Umidità: <span class="value" id="hum">--</span> %</p>
+
+<p>
+Caldaia:
+<span id="caldaia" class="status">--</span>
+</p>
+
+<p>
+Termostato:
+<span id="status" class="status">--</span>
+</p>
+
+<hr>
+
+<h3>Setpoint</h3>
+
+<input type="number" id="setpoint" step="0.1">
+<button class="btnSet" onclick="setSetpoint()">Salva</button>
+
+<h3>Isteresi</h3>
+
+<input type="number" id="hyst" step="0.1">
+<button class="btnSet" onclick="setHyst()">Salva</button>
+
+<h3>Touch Level</h3>
+
+<input type="number" id="touch">
+<button class="btnSet" onclick="setTouch()">Salva</button>
+
+<hr>
+
+<button class="btnOn" onclick="accendi()">
+ACCENDI
+</button>
+
+<button class="btnOff" onclick="spegni()">
+SPEGNI
+</button>
+
+</div>
+
+<script>
+
+function aggiorna()
+{
+    fetch('/')
+    .then(response => response.json())
+    .then(data =>
+    {
+        document.getElementById('temp').innerHTML =
+            Number(data.temp).toFixed(1);
+
+        document.getElementById('hum').innerHTML =
+            Number(data.hum).toFixed(1);
+
+        document.getElementById('setpoint').value =
+            data.setpoint;
+
+        document.getElementById('hyst').value =
+            data.hyst;
+
+        document.getElementById('touch').value =
+            data.touch;
+
+        let statoCaldaia =
+            document.getElementById('caldaia');
+
+        if(data.caldaia)
+        {
+            statoCaldaia.innerHTML = "ACCESA";
+            statoCaldaia.style.background = "green";
+        }
+        else
+        {
+            statoCaldaia.innerHTML = "SPENTA";
+            statoCaldaia.style.background = "red";
+        }
+
+        let stato =
+            document.getElementById('status');
+
+        if(data.status)
+        {
+            stato.innerHTML = "ABILITATO";
+            stato.style.background = "green";
+        }
+        else
+        {
+            stato.innerHTML = "DISABILITATO";
+            stato.style.background = "red";
+        }
+    });
+}
+
+function accendi()
+{
+    fetch('/accendi')
+    .then(() => aggiorna());
+}
+
+function spegni()
+{
+    fetch('/spegni')
+    .then(() => aggiorna());
+}
+
+function setSetpoint()
+{
+    let valore =
+        document.getElementById('setpoint').value;
+
+    fetch('/set?setpoint=' + valore)
+    .then(() => aggiorna());
+}
+
+function setHyst()
+{
+    let valore =
+        document.getElementById('hyst').value;
+
+    fetch('/set?hyst=' + valore)
+    .then(() => aggiorna());
+}
+
+function setTouch()
+{
+    let valore =
+        document.getElementById('touch').value;
+
+    fetch('/set?touch=' + valore)
+    .then(() => aggiorna());
+}
+
+aggiorna();
+
+setInterval(function()
+{
+    aggiorna();
+},2000);
+
+</script>
+
+</body>
+</html>
+)rawliteral";
+
+  server.send(200, "text/html", html);
 }
